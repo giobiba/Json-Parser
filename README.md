@@ -1,2 +1,2 @@
 # Parser
-Writing a parser in haskell 
+Writing a json parser in haskell 
