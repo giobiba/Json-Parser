@@ -201,13 +201,13 @@ jStringParse :: Parser String JValue
 jStringParse = JString <$> (charParse '"' *> jString') -- we test for the
     where
         jString' = do
-            optFirst <- optional jsonCharParse
+            optFirst <- optional jsonCharParse -- we get the first character, using optional because it may not exist
             case optFirst of
-                Nothing -> "" <$ charParse '"'
+                Nothing -> "" <$ charParse '"' -- if there is no first character the input is empty
                 Just first | not $ isSurroagate first ->
-                    (first:) <$> jString'
+                    (first:) <$> jString' -- if the first character is not a surrogate then we treat it as a normal character and call jString' recursively
                 Just first -> do
-                    second <- jsonCharParse
-                    if isHighSurrogate first && isLowSurrogate second
-                    then (combineSurrogates first second:) <$> jString'
-                    else empty
+                    second <- jsonCharParse -- otherwise we parse the second character
+                    if isHighSurrogate first && isLowSurrogate second -- if there is a valid surrogate pair
+                    then (combineSurrogates first second:) <$> jString' -- we combine the surrogates and continue reccursively
+                    else empty -- otherwise we fail because the surrogate pair was invalid
