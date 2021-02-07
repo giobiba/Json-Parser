@@ -178,7 +178,7 @@ jsonCharParse =   stringParse "\\\"" $> '"'
         <|> satisfy (\c -> not (c == '\"' || c == '\\' || isControl c))
     where
         unicodeChar = chr . fromInteger . digitsToNumber 16 0
-                      <$> (string "\\u" *> replicateM 4 hexDigit)  -- for a given string "*>" discards the "\\u" part and runs the parser 4 times
+                      <$> (stringParse "\\u" *> replicateM 4 hexDigit)  -- for a given string "*>" discards the "\\u" part and runs the parser 4 times
         hexDigit = digitToInt <$> satisfy Data.Char.isHexDigit
 
 digitsToNumber :: Int -> Integer -> [Int] -> Integer
