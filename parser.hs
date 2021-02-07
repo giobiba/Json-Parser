@@ -103,9 +103,97 @@ instance Arbitrary JValue where
     arbitrary = sized jValueGen
     shrink    = genericShrink
 
+-- not yet implemented
 jsonWhitespaceGen :: Gen String
 jsonWhitespaceGen =
     scale (round . sqrt . fromIntegral)
     . listOf
     . elements
     $ [' ' , '\n' , '\r' , '\t']
+
+-- parser
+
+newtype Parser i o = Parser  {runParser :: i -> Maybe (i, o)}
+
+instance Functor (Parser i) where
+    fmap f (Parser p) = Parser (fmap (fmap f) . p)
+
+instance Applicative (Parser i) where
+    pure x    = Parser $ \input -> pure (input, x)
+    (Parser pf) <*> (Parser po) = Parser $ \input -> case pf input of
+        Nothing        -> Nothing
+        Just (rest, f) -> fmap f <$> po rest
+
+instance Alternative (Parser i) where
+    empty = Parser $ const empty
+    (Parser p1) <|> (Parser p2) = Parser $ \input -> p1 input <|> p2 input
+
+instance Monad (Parser i) where
+    return = pure
+    p >>= f = Parser $ \input -> case runParser p input of
+        Nothing        -> Nothing
+        Just (rest, o) -> runParser (f o) rest
+
+-- first version
+-- charParse :: Char -> Parser String Char
+-- charParse c = Parse $ \case
+--    (x:xs) | x == c -> Just (xs, x)
+--    _               -> Nothing
+
+-- a generalization of the first version
+satisfy :: (a -> Bool) -> Parser [a] a
+satisfy predicate = Parser $ \case
+    (x:xs) | predicate x  -> Just (xs, x)
+    _                     -> Nothing
+
+charParse :: Char -> Parser String Char
+charParse c  = satisfy (== c)
+
+digitParse :: Parser String Int
+digitParse = digitToInt <$> satisfy isDigit
+--         = Parser $ \i -> fmap digitToInt <$> runParser (satisfy isDigit) i
+--           old
+
+stringParse :: String -> Parser String String
+stringParse ""     = pure ""
+stringParse (c:cs) = (:) <$> charParse c <*> stringParse cs
+
+jNullParse :: Parser String JValue
+jNullParse = stringParse "null" $> JNull
+
+jBoolParse :: Parser String JValue
+jBoolParse = stringParse "true" $> JBool True
+         <|> stringParse "false" $> JBool False
+
+jsonCharParse :: Parser String Char
+jsonCharParse =   string "\\\"" $> '"'
+        <|> string "\\\\" $> '\\'
+        <|> string "\\/"  $> '/'
+        <|> string "\\b"  $> '\b'
+        <|> string "\\f"  $> '\f'
+        <|> string "\\n"  $> '\n'
+        <|> string "\\r"  $> '\r'
+        <|> string "\\t"  $> '\t'
+        <|> unicodeChar
+        <|> satisfy (\c -> not (c == '\"' || c == '\\' || isControl c))
+    where
+        unicodeChar = chr . fromInteger . digitsToNumber 16 0
+                      <$> (string "\\u" *> replicateM 4 hexDigit)  -- for a given string "*>" discards the "\\u" part and runs the parser 4 times
+        hexDigit = digitToInt <$> satisfy Data.Char.isHexDigit
+
+digitsToNumber :: Int -> Integer -> [Int] -> Integer
+digitsToNumber base = foldl (\num acc -> num * fromIntegral base + fromIntegral d)
+
+isHighSurrogate :: Char -> Bool
+isHighSurrogate c = ord c >= 0xDB00 && ord c <= 0xDBFF
+
+isLowSurrogate :: Char -> Bool
+isLowSurrogate c = ord c >= 0xDC00 && ord c <= 0XDFFF
+
+isSurroagate :: Char -> Bool
+isSurroagate c = isLowSurrogate c || isHighSurrogate c
+
+jStringParse :: Parser String JValue
+jStringParse = JString <$> (char '"' *> jString')
+    where
+        jString' = undefined
