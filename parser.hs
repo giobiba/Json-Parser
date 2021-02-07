@@ -166,14 +166,14 @@ jBoolParse = stringParse "true" $> JBool True
          <|> stringParse "false" $> JBool False
 
 jsonCharParse :: Parser String Char
-jsonCharParse =   string "\\\"" $> '"'
-        <|> string "\\\\" $> '\\'
-        <|> string "\\/"  $> '/'
-        <|> string "\\b"  $> '\b'
-        <|> string "\\f"  $> '\f'
-        <|> string "\\n"  $> '\n'
-        <|> string "\\r"  $> '\r'
-        <|> string "\\t"  $> '\t'
+jsonCharParse =   stringParse "\\\"" $> '"'
+        <|> stringParse "\\\\" $> '\\'
+        <|> stringParse "\\/"  $> '/'
+        <|> stringParse "\\b"  $> '\b'
+        <|> stringParse "\\f"  $> '\f'
+        <|> stringParse "\\n"  $> '\n'
+        <|> stringParse "\\r"  $> '\r'
+        <|> stringParse "\\t"  $> '\t'
         <|> unicodeChar
         <|> satisfy (\c -> not (c == '\"' || c == '\\' || isControl c))
     where
@@ -182,7 +182,7 @@ jsonCharParse =   string "\\\"" $> '"'
         hexDigit = digitToInt <$> satisfy Data.Char.isHexDigit
 
 digitsToNumber :: Int -> Integer -> [Int] -> Integer
-digitsToNumber base = foldl (\num acc -> num * fromIntegral base + fromIntegral d)
+digitsToNumber base = foldl (\num acc -> num * fromIntegral base + fromIntegral acc)
 
 isHighSurrogate :: Char -> Bool
 isHighSurrogate c = ord c >= 0xDB00 && ord c <= 0xDBFF
@@ -193,7 +193,21 @@ isLowSurrogate c = ord c >= 0xDC00 && ord c <= 0XDFFF
 isSurroagate :: Char -> Bool
 isSurroagate c = isLowSurrogate c || isHighSurrogate c
 
+combineSurrogates :: Char -> Char -> Char
+combineSurrogates a b = chr $
+    ((ord a - 0xD800) `shiftL` 10) + (ord b - 0xDC00) + 0x10000
+
 jStringParse :: Parser String JValue
-jStringParse = JString <$> (char '"' *> jString')
+jStringParse = JString <$> (charParse '"' *> jString') -- we test for the
     where
-        jString' = undefined
+        jString' = do
+            optFirst <- optional jsonCharParse
+            case optFirst of
+                Nothing -> "" <$ charParse '"'
+                Just first | not $ isSurroagate first ->
+                    (first:) <$> jString'
+                Just first -> do
+                    second <- jsonCharParse
+                    if isHighSurrogate first && isLowSurrogate second
+                    then (combineSurrogates first second:) <$> jString'
+                    else empty
