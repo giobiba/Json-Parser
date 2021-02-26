@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, TupleSections, LambdaCase #-}
+{-# LANGUAGE DeriveGeneric, LambdaCase #-}
 module JSONParser where
 
 import Control.Applicative (Alternative(..), optional)
