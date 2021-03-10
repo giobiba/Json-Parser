@@ -11,6 +11,7 @@ import GHC.Generics (Generic)
 import Numeric (showHex)
 import Test.QuickCheck hiding (Positive, Negative)
 
+-- message from error branch
 data JValue = JNull
             | JBool Bool
             | JString String
